@@ -1,0 +1,24 @@
+{
+  "_comment": "OpenClaw model config for newton-claw on Jetson Thor. OpenClaw runs OPEN local models via Ollama, unsandboxed on the host. Merge this 'models'/'agents' block into ~/.openclaw/openclaw.json. Pull the model first:  ollama pull gemma4:12b . Thor's 128 GB unified memory is shared between the sim, training and the LLM — the 12B model (~9 GB) leaves the most room for 4096-env training.",
+  "models": {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://localhost:11434/v1",
+        "apiKey": "ollama",
+        "api": "openai-completions",
+        "models": [
+          {"id": "gemma4:12b", "name": "Gemma 4 12B (local)", "contextWindow": 65536, "maxTokens": 8192},
+          {"id": "gemma4:31b", "name": "Gemma 4 31B (local)", "contextWindow": 65536, "maxTokens": 8192}
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "ollama/gemma4:12b",
+        "fallbacks": ["ollama/gemma4:31b"]
+      }
+    }
+  }
+}

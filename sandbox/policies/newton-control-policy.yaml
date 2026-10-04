@@ -1,0 +1,33 @@
+# Newton Control Server egress for a NemoClaw sandbox.
+#
+# Allows the sandbox to reach the host Newton Control Server (train / play / eval /
+# open) at host.openshell.internal:5561. Schema MATCHES the built-in
+# local-inference preset (exact binary paths, no wildcards) — the OPA engine ties
+# the network allowance to specific binaries, so curl/node/python3/openclaw must
+# be listed exactly or requests are denied (policy:- -> 403).
+preset:
+  name: newton-control
+  description: "Newton Control Server access (train/play/eval/open) on host:5561"
+
+network_policies:
+  newton-control:
+    name: newton-control
+    endpoints:
+      - host: host.openshell.internal
+        port: 5561
+        # No L7 (`protocol: rest` + rules) on purpose: with L7 rules OpenShell only accepts CONNECT
+        # tunnels and rejects plain-HTTP proxy requests ("endpoint has L7 rules; use CONNECT").
+        allowed_ips:
+          # OpenShell's SSRF guard rejects private host-gateway IPs unless the
+          # policy explicitly allowlists the resolved address (172.x here).
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+    binaries:
+      - { path: /usr/local/bin/openclaw }
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.11 }
+      - { path: /usr/bin/python3.12 }

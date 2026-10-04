@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""claw — the single deterministic entrypoint for newton-claw (Newton physics on Jetson Thor).
+
+Collapses every flow into ONE command so a small local model (Gemma/Nemotron)
+only emits a single tool call. Also usable by hand.
+
+    claw up                                   ensure the control server is running
+    claw tasks [word]                         list trainable tasks (filter by word, e.g. go2, humanoid)
+    claw train --task <id> [--num_envs N] [--max_iterations N] [--seed N] [--resume]
+               [--headless | --web] [knob=value ...]
+        default = GUI: a Newton Viewer window on the Thor's monitor shows 36 of the 4096
+        training robots. --headless = no window (fastest), --web = browser (http://<thor-ip>:8090).
+    claw play  --task <id> [--pretrained | --checkpoint P | --onnx P] [--headless | --web]
+               [--num_envs N] [--command VX VY YAW]
+        run INFERENCE with the latest trained policy (or the reference one); GUI window by default.
+    claw eval  --task <id> [--pretrained | --checkpoint P | --onnx P] [--num_envs N]
+        headless inference benchmark; metrics appear in `claw status` when done.
+    claw open  --robot <name> [--web]         show a robot in the Newton viewer (GUI window by default)
+    claw close                                stop whatever is running, free the GPU
+    claw status | logs | robots | runs | device | restart
+
+One GPU job at a time: `claw close` before starting something else.
+"""
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+PORT = os.environ.get("NEWTON_CONTROL_PORT", "5561")
+DEFAULT_VIEWER = os.environ.get("NEWTON_DEFAULT_VIEWER", "gl")     # gl = window on the Thor's monitor
+HERE = os.path.dirname(os.path.abspath(__file__))
+_BASE = None
+
+
+def base():
+    """Control-server URL. OpenClaw runs on the host (localhost); a NemoClaw sandbox
+    reaches the host at host.openshell.internal. NEWTON_CONTROL_HOST overrides."""
+    global _BASE
+    if _BASE:
+        return _BASE
+    host = os.environ.get("NEWTON_CONTROL_HOST")
+    if host:
+        _BASE = f"http://{host}:{PORT}"
+        return _BASE
+    # Probe over HTTP (not a raw socket): inside a sandbox the only way out is the
+    # egress proxy, which urllib picks up from http_proxy.
+    for h in ("localhost", "host.openshell.internal"):
+        try:
+            urllib.request.urlopen(f"http://{h}:{PORT}/envs", timeout=3).close()
+            _BASE = f"http://{h}:{PORT}"
+            return _BASE
+        except Exception:
+            continue
+    _BASE = f"http://localhost:{PORT}"
+    return _BASE
+
+
+def _req(method, path, body=None, timeout=15):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(base() + path, data=data, method=method,
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode() or "{}")
+        except Exception:
+            return e.code, {"error": str(e)}
+
+
+def server_up():
+    try:
+        _req("GET", "/envs", timeout=3)
+        return True
+    except Exception:
+        return False
+
+
+def ensure_server():
+    if server_up():
+        return True
+    print("[claw] control server down — starting it ...")
+    subprocess.run(["bash", os.path.join(HERE, "clawup.sh")], check=False)
+    for _ in range(30):
+        if server_up():
+            return True
+        time.sleep(1)
+    print("[claw] ERROR: control server did not come up", file=sys.stderr)
+    return False
+
+
+def _opt(args, flag, default=None):
+    return args[args.index(flag) + 1] if flag in args and args.index(flag) + 1 < len(args) else default
+
+
+def _viewer(args, default):
+    if "--gui" in args:
+        return "gl"
+    if "--web" in args:
+        return "viser"
+    if "--headless" in args:
+        return "none"
+    return default
+
+
+def _thor_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return "localhost"
+
+
+def _show(resp):
+    text = json.dumps(resp, indent=2).replace("<thor-ip>", _thor_ip())
+    print(text)
+
+
+def _policy_args(args, body):
+    if "--pretrained" in args:
+        body["pretrained"] = True
+    for flag in ("--checkpoint", "--onnx", "--num_envs", "--steps"):
+        v = _opt(args, flag)
+        if v:
+            body[flag[2:]] = v
+    if "--command" in args:
+        i = args.index("--command")
+        body["command"] = [float(x) for x in args[i + 1:i + 4]]
+    return body
+
+
+def cmd_train(args):
+    task = _opt(args, "--task")
+    if not task:
+        print("usage: claw train --task <id> [--num_envs N] [--max_iterations N] [--gui|--web] [knob=value ...]\n"
+              "       list ids with: claw tasks", file=sys.stderr)
+        return 2
+    body = {"task": task, "viewer": _viewer(args, DEFAULT_VIEWER)}
+    for flag, key in (("--num_envs", "num_envs"), ("--max_iterations", "max_iterations"), ("--seed", "seed")):
+        v = _opt(args, flag)
+        if v is not None:
+            body[key] = int(v)
+    if "--resume" in args:
+        body["resume"] = True
+    body["overrides"] = [a for a in args if "=" in a and not a.startswith("--")]
+    code, resp = _req("POST", "/train", body)
+    _show(resp)
+    if code == 200:
+        where = {"gl": "A window is opening on the Thor's monitor.", "none": "Running headless.",
+                 "viser": f"Watch at http://{_thor_ip()}:8090."}[body["viewer"]]
+        print(f"[claw] training started. {where} Progress: `claw status`   Stop: `claw close`")
+    return 0 if code == 200 else 1
+
+
+def cmd_play(kind, args):
+    task = _opt(args, "--task")
+    if not task:
+        print(f"usage: claw {kind} --task <id> [--pretrained] [--gui|--web]", file=sys.stderr)
+        return 2
+    body = _policy_args(args, {"task": task, "viewer": _viewer(args, DEFAULT_VIEWER)})
+    code, resp = _req("POST", f"/{kind}", body)
+    _show(resp)
+    if code == 200 and kind == "eval":
+        print("[claw] evaluation started (headless). Metrics appear under progress.result in `claw status`.")
+    elif code == 200 and body["viewer"] == "viser":
+        print(f"[claw] inference running. Watch it at http://{_thor_ip()}:8090 (takes ~20 s to come up).")
+    elif code == 200:
+        print("[claw] inference running in a window on the Thor's display.")
+    return 0 if code == 200 else 1
+
+
+def cmd_open(args):
+    robot = _opt(args, "--robot")
+    if not robot:
+        print("usage: claw open --robot <name> [--gui|--web]   (names: claw robots)", file=sys.stderr)
+        return 2
+    body = {"robot": robot, "viewer": _viewer(args, DEFAULT_VIEWER)}
+    wc = _opt(args, "--world_count")
+    if wc:
+        body["world_count"] = int(wc)
+    code, resp = _req("POST", "/open", body)
+    _show(resp)
+    if code == 200 and body["viewer"] == "viser":
+        print(f"[claw] viewer starting. Open http://{_thor_ip()}:8090 in a browser (~20 s).")
+    elif code == 200:
+        print("[claw] viewer opening in a window on the Thor's monitor.")
+    return 0 if code == 200 else 1
+
+
+def cmd_tasks(args):
+    words = [a.lstrip("-").lower() for a in args]
+    envs = _req("GET", "/envs")[1].get("environments", [])
+    rows = [e for e in envs if all(w in json.dumps(e).lower() for w in words)]
+    print(f"{len(rows)} Newton task(s)" + (f" matching {words}" if words else "") + ":")
+    for e in rows:
+        pre = "  [pretrained policy available]" if e.get("pretrained") else ""
+        print(f"  {e['id']:40s} {e['robot']:22s} {e['category']:10s} {e['notes']}{pre}")
+        print(f"      train: claw train --task {e['id']}")
+    if not rows:
+        print("  (none — run `claw tasks` with no filter to see all)")
+    return 0
+
+
+def cmd_close(_args):
+    if not server_up():
+        print("[claw] control server not running — nothing to stop.")
+        return 0
+    r = _req("POST", "/stop", {})[1]
+    print(f"[claw] {r.get('status', 'stopped')} {r.get('kind', '') or ''} {r.get('label', '') or ''}".rstrip())
+    print("[claw] closed — GPU free.")
+    return 0
+
+
+def cmd_restart(_args):
+    cmd_close([])
+    subprocess.run(["pkill", "-f", "newton_control_server.py"], check=False)
+    time.sleep(2)
+    if ensure_server():
+        print("[claw] control server restarted (new code loaded).")
+        return 0
+    return 1
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+    cmd, rest = sys.argv[1], sys.argv[2:]
+    if cmd in ("restart", "reload"):
+        return cmd_restart(rest)
+    if not ensure_server():
+        return 1
+    if cmd == "up":
+        print("[claw] control server up.")
+        return 0
+    if cmd == "train":
+        return cmd_train(rest)
+    if cmd in ("play", "eval"):
+        return cmd_play(cmd, rest)
+    if cmd == "open":
+        return cmd_open(rest)
+    if cmd in ("tasks", "envs"):
+        return cmd_tasks(rest)
+    if cmd in ("close", "stop", "shutdown"):
+        return cmd_close(rest)
+    if cmd in ("status", "robots", "runs", "device"):
+        _show(_req("GET", "/" + cmd)[1])
+        return 0
+    if cmd == "logs":
+        print(_req("GET", f"/logs?lines={_opt(rest, '--lines', '40')}")[1].get("lines", ""))
+        return 0
+    print(f"unknown command: {cmd}\n{__doc__}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,6 @@
+# newton-claw runtime for Jetson Thor (JetPack 7 / L4T R38, aarch64, CUDA 13, Python 3.12).
+# Install with setup_thor.sh (uses the PyTorch cu130 index for the aarch64 CUDA wheels).
+newton[examples]==1.6.0     # Newton physics + MuJoCo-Warp solver + Warp-NN ONNX runtime + GL viewer
+rsl-rl-lib==5.5.1           # PPO trainer
+torch>=2.10                 # CUDA 13 build from https://download.pytorch.org/whl/cu130
+viser==1.0.26               # browser viewer (claw ... --web); version pinned by Newton

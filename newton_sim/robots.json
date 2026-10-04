@@ -1,0 +1,15 @@
+{
+  "_comment": "Robots/scenes `claw open --robot <name>` can show in the Newton viewer. Each maps to a stock `python -m newton.examples <example>` (assets download on first use). Add an entry to make something openable.",
+  "robots": [
+    {"name": "unitree_g1", "example": "robot_g1", "category": "humanoid", "multi_world": true, "description": "Unitree G1 humanoid (29 DOF + hands), PD-held standing"},
+    {"name": "unitree_h1", "example": "robot_h1", "category": "humanoid", "multi_world": true, "description": "Unitree H1 humanoid"},
+    {"name": "unitree_go2", "example": "robot_policy", "args": ["--robot", "go2"], "category": "quadruped", "description": "Unitree Go2 walking with the reference policy (keys i/j/k/l in the GL window)"},
+    {"name": "anymal_c", "example": "robot_anymal_c_walk", "category": "quadruped", "description": "ANYmal C walking with a pretrained policy"},
+    {"name": "anymal_d", "example": "robot_anymal_d", "category": "quadruped", "multi_world": true, "description": "ANYmal D"},
+    {"name": "franka_panda", "example": "ik_franka", "category": "manipulator", "description": "Franka Panda arm with interactive IK"},
+    {"name": "ur10", "example": "robot_ur10", "category": "manipulator", "multi_world": true, "description": "UR10 arm following joint targets"},
+    {"name": "allegro_hand", "example": "robot_allegro_hand", "category": "hand", "multi_world": true, "description": "Allegro hand manipulating a cube"},
+    {"name": "cartpole", "example": "robot_cartpole", "category": "classic", "multi_world": true, "description": "Cartpoles"},
+    {"name": "ant_humanoid", "example": "selection_articulations", "category": "classic", "multi_world": true, "description": "MuJoCo ant + humanoid worlds with random torques"}
+  ]
+}

@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# --- Datasets & training artifacts (never commit) ---
+datasets/
+*.hdf5
+*.h5
+**/logs/
+**/outputs/
+**/runs/
+*.pt
+*.ckpt
+*.onnx
+
+# --- Runtime scratch ---
+newton_sim/_control_logs/
+_scratch/
+install.log
+
+# --- OS / editor ---
+.DS_Store
+*.swp

@@ -1,0 +1,11 @@
+{
+  "_comment": "Canonical Newton task registry served by newton_control_server.py (GET /envs) and validated by /train. Must match newton_lab/newton_lab/envs/__init__.py (check: newton_lab/scripts/list_tasks.py --check).",
+  "environments": [
+    {"id": "Newton-Cartpole-v0", "robot": "Cartpole", "category": "classic", "terrain": "none", "control": "force", "default_iterations": 150, "pretrained": false, "notes": "smoke test; trains in ~30 s"},
+    {"id": "Newton-Ant-v0", "robot": "Ant", "category": "quadruped", "terrain": "flat", "control": "torque", "default_iterations": 500, "pretrained": false, "notes": "run forward"},
+    {"id": "Newton-Humanoid-v0", "robot": "MuJoCo Humanoid", "category": "humanoid", "terrain": "flat", "control": "torque", "default_iterations": 1500, "pretrained": false, "notes": "run forward"},
+    {"id": "Newton-Velocity-Flat-Unitree-Go2-v0", "robot": "Unitree Go2", "category": "quadruped", "terrain": "flat", "control": "joint position", "default_iterations": 1000, "pretrained": true, "notes": "velocity tracking"},
+    {"id": "Newton-Velocity-Flat-Anymal-C-v0", "robot": "ANYmal C", "category": "quadruped", "terrain": "flat", "control": "joint position", "default_iterations": 1000, "pretrained": true, "notes": "velocity tracking"},
+    {"id": "Newton-Velocity-Flat-Unitree-G1-v0", "robot": "Unitree G1", "category": "humanoid", "terrain": "flat", "control": "joint position", "default_iterations": 3000, "pretrained": true, "notes": "velocity tracking"}
+  ]
+}
