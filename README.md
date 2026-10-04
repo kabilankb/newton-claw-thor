@@ -1,5 +1,7 @@
 # newton-claw-thor
 
+https://github.com/user-attachments/assets/e9cc0573-3e8c-48d6-9bf4-6b49fe28426f
+
 Train **and** run robot policies in the **[Newton](https://github.com/newton-physics/newton)
 physics engine** on a single **NVIDIA Jetson AGX Thor** — by talking to a local agent
 (**Gemma 4** in the **NemoClaw** TUI) that turns each request into one command.
